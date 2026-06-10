@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>РЫБАЦКОЕ: ПОСЛЕДНИЙ МАРШРУТ</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  canvas { display: block; }
+  .overlay {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #b8bcc8; font-family: 'Segoe UI', Arial, sans-serif;
+    user-select: none; text-align: center;
+  }
+  #ui { background: radial-gradient(ellipse at center, rgba(8,10,16,0.88) 0%, rgba(0,0,0,0.97) 100%); cursor: pointer; }
+  #ui h1 { font-size: 64px; margin: 0; font-weight: 200; letter-spacing: 26px; color: #d8dce6; text-shadow: 0 0 22px rgba(255,154,60,0.25); }
+  #ui h2 { font-size: 17px; margin: 14px 0 60px; font-weight: 300; letter-spacing: 11px; color: #8a6b46; }
+  #ui #hint { font-size: 13px; letter-spacing: 3px; color: #595f6c; line-height: 2.1; opacity: 0; transition: opacity 1.2s; }
+  #ui #start { margin-top: 36px; font-size: 15px; letter-spacing: 6px; color: #9aa1ae; animation: pulse 2.6s infinite; }
+  #status { margin-top: 30px; font-size: 12px; letter-spacing: 4px; color: #6b5234; }
+  @keyframes pulse { 0%,100% { opacity: 0.45; } 50% { opacity: 1; } }
+
+  #intro { display: none; background: rgba(0,0,0,0.93); cursor: pointer; z-index: 11; }
+  #introbox {
+    max-width: 620px; padding: 34px 40px; text-align: left;
+    border: 1px solid #232936; background: #0b0e14; border-radius: 6px;
+  }
+  #introhead { font-size: 12px; letter-spacing: 2px; color: #5d6878; margin-bottom: 18px; }
+  #introtext { font-size: 18px; line-height: 1.75; color: #c3c9d6; min-height: 200px; white-space: pre-wrap; }
+  #introskip { margin-top: 22px; font-size: 12px; letter-spacing: 3px; color: #525a68; animation: pulse 2.6s infinite; }
+
+  #paper { display: none; background: rgba(0,0,0,0.85); cursor: pointer; z-index: 11; }
+  #paperbox {
+    max-width: 460px; padding: 40px 44px; text-align: left; transform: rotate(-1.2deg);
+    background: #d8d2c2; color: #2b2620; font-size: 19px; line-height: 1.7;
+    font-family: Georgia, serif; box-shadow: 0 14px 60px rgba(0,0,0,0.9);
+  }
+  #paperbox .sig { text-align: right; margin-top: 18px; }
+  #paperhint { margin-top: 24px; font-size: 12px; letter-spacing: 3px; color: #8d93a0; animation: pulse 2.6s infinite; }
+
+  #endscreen { display: none; background: #000; z-index: 12; cursor: pointer; }
+  #endscreen h1 { font-size: 34px; font-weight: 200; letter-spacing: 14px; color: #d8dce6; }
+  #endscreen p { font-size: 14px; letter-spacing: 3px; color: #6d7482; line-height: 2; }
+
+  #flash {
+    display: none; position: fixed; inset: 0; z-index: 20; background: #000;
+    align-items: center; justify-content: center; flex-direction: column;
+  }
+  #flash span { font-family: 'Segoe UI', Arial; font-size: 30px; letter-spacing: 12px; color: #8d1f1f; font-weight: 300; }
+
+  #flicker { position: fixed; inset: 0; z-index: 8; background: #000; opacity: 0; pointer-events: none; }
+  #fade { position: fixed; inset: 0; z-index: 15; background: #000; opacity: 0; pointer-events: none; transition: opacity 1.4s; }
+  @keyframes flicker {
+    0% { opacity: 0; } 12% { opacity: 0.85; } 22% { opacity: 0; }
+    38% { opacity: 0.7; } 52% { opacity: 0; } 70% { opacity: 0.4; } 100% { opacity: 0; }
+  }
+
+  #objective {
+    position: fixed; top: 26px; left: 30px; z-index: 6; pointer-events: none;
+    font-family: 'Segoe UI', Arial; font-size: 15px; letter-spacing: 3px; color: #c9ced9;
+    text-shadow: 0 2px 10px #000; opacity: 0; transition: opacity 1.5s; text-align: left; line-height: 1.7;
+  }
+  #objective .sub { font-size: 12px; color: #7d8493; letter-spacing: 2px; }
+  #clock {
+    position: fixed; top: 26px; right: 34px; z-index: 6; pointer-events: none;
+    font-family: Consolas, monospace; font-size: 26px; color: #b6bdcb;
+    text-shadow: 0 2px 10px #000; opacity: 0; transition: opacity 1.5s;
+  }
+  #toast {
+    position: fixed; bottom: 14%; left: 0; right: 0; text-align: center; z-index: 6; pointer-events: none;
+    font-family: 'Segoe UI', Arial; font-size: 15px; letter-spacing: 3px; color: #aab0bd;
+    text-shadow: 0 2px 10px #000; opacity: 0; transition: opacity 0.8s;
+  }
+  #marker {
+    position: fixed; z-index: 6; pointer-events: none; display: none;
+    width: 30px; height: 30px; line-height: 30px; text-align: center;
+    border: 1px solid rgba(190,205,235,0.5); border-radius: 50%;
+    font-family: Georgia, serif; font-weight: bold; font-size: 17px;
+    color: rgba(220,80,60,0.9); background: rgba(5,8,14,0.45);
+    text-shadow: 0 0 8px rgba(210,59,47,0.7);
+  }
+  #vignette { position: fixed; inset: 0; z-index: 5; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.62) 100%); }
+  #dot { position: fixed; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1px;
+    background: rgba(255,255,255,0.22); border-radius: 50%; z-index: 6; pointer-events: none; }
+  #streetname {
+    position: fixed; bottom: 7%; left: 0; right: 0; text-align: center; z-index: 6;
+    font-family: 'Segoe UI', Arial; font-weight: 200; font-size: 26px;
+    letter-spacing: 8px; color: #cdd2dd; opacity: 0; transition: opacity 1.6s;
+    text-shadow: 0 2px 14px #000; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="vignette"></div>
+<div id="flicker"></div>
+<div id="dot"></div>
+<div id="streetname"></div>
+<div id="marker">М</div>
+<div id="objective"></div>
+<div id="clock">23:42</div>
+<div id="toast"></div>
+
+<div id="ui" class="overlay">
+  <h1>РЫБАЦКОЕ</h1>
+  <h2>ПОСЛЕДНИЙ МАРШРУТ</h2>
+  <div id="hint">
+    W A S D — ИДТИ&nbsp;&nbsp;&nbsp;SHIFT — БЕЖАТЬ&nbsp;&nbsp;&nbsp;F — ФОНАРИК&nbsp;&nbsp;&nbsp;ESC — ПАУЗА<br>
+    <span id="start">НАЖМИ, ЧТОБЫ ВОЙТИ В РАЙОН</span>
+  </div>
+  <div id="status"></div>
+</div>
+
+<div id="intro" class="overlay">
+  <div id="introbox">
+    <div id="introhead">ГОЛОСОВОЕ СООБЩЕНИЕ&nbsp;&nbsp;·&nbsp;&nbsp;ДИМА&nbsp;&nbsp;·&nbsp;&nbsp;03:17&nbsp;&nbsp;·&nbsp;&nbsp;4 МЕСЯЦА НАЗАД</div>
+    <div id="introtext"></div>
+    <div id="introskip">КЛИК — ДАЛЬШЕ</div>
+  </div>
+</div>
+
+<div id="paper" class="overlay">
+  <div id="paperbox">
+    Если ты это читаешь — я не успел.<br><br>
+    Оно слышит шаги. Когда близко — иди тихо, не беги.<br><br>
+    Последний поезд — в полночь. Других не будет.<br>
+    Успей.
+    <div class="sig">— Д.</div>
+  </div>
+  <div id="paperhint">КЛИК — ПОЛОЖИТЬ ЗАПИСКУ</div>
+</div>
+
+<div id="endscreen" class="overlay">
+  <h1>КОНЕЦ ПРОЛОГА</h1>
+  <p>Поезд пришёл. Двери открылись.<br>Но это — уже другая история.<br><br>НАЖМИ, ЧТОБЫ ВЕРНУТЬСЯ В РАЙОН</p>
+</div>
+
+<div id="flash"><span>ОН УСЛЫШАЛ ТЕБЯ</span></div>
+<div id="fade"></div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
