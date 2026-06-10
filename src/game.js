@@ -89,7 +89,8 @@ export class Angel {
 export class Listener {
   constructor(scene) {
     this.group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x040506, roughness: 1 });
+    // не чисто чёрный: холодный отлив, чтобы силуэт читался в тумане
+    const mat = new THREE.MeshStandardMaterial({ color: 0x10131a, roughness: 0.85, emissive: 0x131a28, emissiveIntensity: 0.45 });
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.7, 4, 8), mat);
     torso.position.y = 1.85;
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), mat);
@@ -104,10 +105,10 @@ export class Listener {
       leg.position.set(0.18 * s, 0.62, 0);
       this.group.add(leg);
     }
-    const earMat = new THREE.MeshBasicMaterial({ color: 0x9fb4d8 });
+    const earMat = new THREE.MeshBasicMaterial({ color: 0xd6e2f5 });
     for (const s of [-1, 1]) {
-      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), earMat);
-      ear.position.set(0.17 * s, 3.06, 0);
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.085, 6, 4), earMat);
+      ear.position.set(0.2 * s, 3.06, 0);
       this.group.add(ear);
     }
     this.group.add(torso, head);
@@ -120,24 +121,37 @@ export class Listener {
     this.idleT = 0;
     this.clickT = 0;
     this.twitchT = 0;
+    this.targetT = 0; // снапшот цели при ходьбе игрока
+    this.deafT = 0;   // глухота после смерти игрока — передышка
+    this.thudT = 0;
   }
   place(x, z) { this.group.position.set(x, 0, z); }
   setState(s, t = 0) { this.state = s; this.stateT = t; }
 
-  update(dt, player, audio, time) {
+  update(dt, player, audio, pan) {
     const p = this.group.position;
     const dx = player.pos.x - p.x, dz = player.pos.z - p.z;
     const dist = Math.hypot(dx, dz);
     const noise = player.noise;
+    this.deafT = Math.max(0, this.deafT - dt);
+    this.targetT = Math.max(0, this.targetT - dt);
 
-    // слух
-    const hearR = noise >= 1 ? 240 : noise > 0 ? 95 : 0;
-    if (hearR > 0 && dist < hearR) {
-      this.target.set(player.pos.x, player.pos.z);
-      if (noise >= 1 && dist < 60 && this.state !== 'lunge') {
-        this.setState('lunge', 6);
-        audio.screech();
-      } else if (this.state !== 'lunge') this.setState('investigate');
+    // слух: бег слышно издалека, шаг — только рядом, на корточках — никак
+    const hearR = noise >= 1 ? 240 : noise > 0 ? 45 : 0;
+    if (this.deafT <= 0 && hearR > 0 && dist < hearR) {
+      if (noise >= 1 || dist < 20) {
+        // бег или совсем рядом — ведёт точно
+        this.target.set(player.pos.x, player.pos.z);
+        if (noise >= 1 && dist < 70 && this.state !== 'lunge') {
+          this.setState('lunge', 6);
+          audio.screech();
+        } else if (this.state !== 'lunge') this.setState('investigate');
+      } else if (this.targetT <= 0) {
+        // шаг: идёт на МЕСТО звука, а не на тебя — можно уйти вбок
+        this.target.set(player.pos.x, player.pos.z);
+        this.targetT = 5;
+        if (this.state !== 'lunge') this.setState('investigate');
+      }
     }
 
     let speed = 0;
@@ -151,7 +165,8 @@ export class Listener {
       }
       speed = 1.2;
     } else if (this.state === 'investigate') {
-      speed = dist > 140 ? 7.5 : 4.3; // далеко — нагоняет
+      // медленнее шага игрока: уйти можно, если не топтаться на месте
+      speed = dist > 200 ? 6.0 : 3.4;
     } else if (this.state === 'lunge') {
       speed = 8.3;
       if (noise >= 1) this.target.set(player.pos.x, player.pos.z);
@@ -193,11 +208,17 @@ export class Listener {
       this.group.rotation.y += (Math.random() - 0.5) * 0.5;
       this.head.position.x = (Math.random() - 0.5) * 0.12;
     }
-    // щёлкает в темноте рядом
+    // щёлкает в темноте — чем ближе, тем чаще, и слышно, С КАКОЙ СТОРОНЫ
     this.clickT -= dt;
-    if (dist < 38 && this.clickT <= 0) {
-      this.clickT = 1.3 + Math.random() * 1.6;
-      audio.clicks();
+    if (dist < 70 && this.clickT <= 0) {
+      this.clickT = 0.8 + (dist / 70) * 1.8;
+      audio.clicks(pan);
+    }
+    // тяжёлые шаги, когда он близко и движется
+    this.thudT -= dt;
+    if (dist < 30 && speed > 0 && this.thudT <= 0) {
+      this.thudT = speed > 5 ? 0.34 : 0.62;
+      audio.thud(pan);
     }
     return dist;
   }
@@ -319,7 +340,8 @@ export class Game {
       const d = Math.hypot(dx, dz);
       this.listener.place(this.friend.x + dx / d * 150, this.friend.z + dz / d * 150);
       this.listener.setState('idle');
-      this.toast('Минус две минуты. Крадись (Ctrl), когда он рядом.', 6);
+      this.listener.deafT = 10; // передышка после смерти
+      this.toast('Минус две минуты. Слушай щелчки: это он. Замри или крадись (Ctrl).', 7);
     }, 2200);
   }
 
@@ -430,9 +452,17 @@ export class Game {
       this.ui.clock.textContent = String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
       if (this.clockMin >= 24 * 60) { this.ending('bad'); return; }
 
-      const dist = this.listener.update(dt, this.player, this.audio, performance.now() / 1000);
-      this.audio.setDrone(dist < 90 ? Math.min(1, (90 - dist) / 75) : 0);
-      if (dist < 1.7) this.onKill();
+      // стереопозиция Слушателя: pan = проекция направления на «право» камеры
+      const ldx = this.listener.group.position.x - this.player.pos.x;
+      const ldz = this.listener.group.position.z - this.player.pos.z;
+      const ld = Math.hypot(ldx, ldz) || 1;
+      const pan = Math.max(-1, Math.min(1,
+        (ldx * Math.cos(this.player.yaw) - ldz * Math.sin(this.player.yaw)) / ld));
+      const dist = this.listener.update(dt, this.player, this.audio, pan);
+      this.audio.setDrone(dist < 90 ? Math.min(1, (90 - dist) / 75) : 0, pan);
+      // на корточках и без шума тебя надо буквально задеть
+      const killR = this.player.crouching && this.player.noise === 0 ? 0.8 : 1.7;
+      if (dist < killR) this.onKill();
 
       // ангелы крадут время
       for (const a of this.angels) {
@@ -499,7 +529,8 @@ export class Game {
     this.listener = new Listener(this.scene);
     const dx = this.metro.x - this.player.pos.x, dz = this.metro.z - this.player.pos.z;
     const d = Math.hypot(dx, dz) || 1;
-    this.listener.place(this.player.pos.x - dx / d * 70, this.player.pos.z - dz / d * 70);
+    this.listener.place(this.player.pos.x - dx / d * 90, this.player.pos.z - dz / d * 90);
+    this.toast('Щелчки в темноте — это он. Иди шагом, а рядом — замри или крадись.', 8);
     // ангелы на обратном пути
     for (const tt of [0.35, 0.6]) {
       const mx = this.player.pos.x + (this.metro.x - this.player.pos.x) * tt;

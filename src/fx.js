@@ -145,17 +145,19 @@ export class GameAudio {
       rSrc.connect(rFil).connect(this.rumbleGain).connect(ctx.destination);
       rSrc.start();
 
-      // гул опасности (Слушатель рядом) — два расстроенных низких тона
+      // гул опасности (Слушатель рядом) — два расстроенных низких тона, со стереопозицией
       const d1 = ctx.createOscillator(); d1.type = 'sine'; d1.frequency.value = 46;
       const d2 = ctx.createOscillator(); d2.type = 'sine'; d2.frequency.value = 49.5;
       this.droneGain = ctx.createGain(); this.droneGain.gain.value = 0;
       d1.connect(this.droneGain); d2.connect(this.droneGain);
-      this.droneGain.connect(ctx.destination);
+      this.dronePan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      if (this.dronePan) this.droneGain.connect(this.dronePan).connect(ctx.destination);
+      else this.droneGain.connect(ctx.destination);
       d1.start(); d2.start();
     } catch (e) { /* нет звука — не страшно */ }
   }
 
-  _noiseBurst(dur, freq, type, vol, freqEnd) {
+  _noiseBurst(dur, freq, type, vol, freqEnd, pan) {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const len = Math.ceil(ctx.sampleRate * dur);
@@ -168,7 +170,14 @@ export class GameAudio {
     if (freqEnd) f.frequency.exponentialRampToValueAtTime(freqEnd, ctx.currentTime + dur);
     const g = ctx.createGain(); g.gain.value = vol;
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-    src.connect(f).connect(g).connect(ctx.destination);
+    let tail = g;
+    if (pan !== undefined && pan !== 0 && ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner();
+      p.pan.value = Math.max(-1, Math.min(1, pan));
+      g.connect(p); tail = p;
+    }
+    src.connect(f).connect(g);
+    tail.connect(ctx.destination);
     src.start();
   }
 
@@ -192,8 +201,9 @@ export class GameAudio {
     o.start(); o.stop(ctx.currentTime + 1.15);
     this._noiseBurst(0.7, 300, 'lowpass', 0.55, 60);
   }
-  setDrone(level) { // 0..1 — близость Слушателя
+  setDrone(level, pan = 0) { // 0..1 — близость Слушателя, pan — с какой стороны
     if (this.droneGain) this.droneGain.gain.setTargetAtTime(level * 0.22, this.ctx.currentTime, 0.25);
+    if (this.dronePan) this.dronePan.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), this.ctx.currentTime, 0.3);
   }
   setRumble(level) { // 0..1 — близость метро
     if (this.rumbleGain) this.rumbleGain.gain.setTargetAtTime(level * 0.3, this.ctx.currentTime, 0.4);
@@ -212,14 +222,16 @@ export class GameAudio {
     o.start(); o.stop(ctx.currentTime + 0.65);
     this._noiseBurst(0.5, 2400, 'highpass', 0.18);
   }
-  // эхолокационные щелчки Слушателя рядом
-  clicks() {
+  // эхолокационные щелчки Слушателя рядом — слышно, с какой стороны
+  clicks(pan = 0) {
     if (!this.ctx) return;
     const n = 3 + (Math.random() * 3 | 0);
     for (let i = 0; i < n; i++) {
-      setTimeout(() => this._noiseBurst(0.035, 1500 + Math.random() * 700, 'bandpass', 0.12), i * (60 + Math.random() * 50));
+      setTimeout(() => this._noiseBurst(0.035, 1500 + Math.random() * 700, 'bandpass', 0.14, undefined, pan), i * (60 + Math.random() * 50));
     }
   }
+  // тяжёлый шаг Слушателя
+  thud(pan = 0) { this._noiseBurst(0.09, 92, 'lowpass', 0.3, undefined, pan); }
   // крик Пустого, укравшего время
   steal() {
     this._noiseBurst(0.9, 3000, 'highpass', 0.3);
