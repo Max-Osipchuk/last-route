@@ -25,6 +25,7 @@ const ui = {
   street: document.getElementById('streetname'),
   marker: document.getElementById('marker'),
   fade: document.getElementById('fade'),
+  noise: document.getElementById('noise'),
 };
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });

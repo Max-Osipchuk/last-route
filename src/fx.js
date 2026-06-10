@@ -230,8 +230,11 @@ export class GameAudio {
       setTimeout(() => this._noiseBurst(0.035, 1500 + Math.random() * 700, 'bandpass', 0.14, undefined, pan), i * (60 + Math.random() * 50));
     }
   }
-  // тяжёлый шаг Слушателя
-  thud(pan = 0) { this._noiseBurst(0.09, 92, 'lowpass', 0.3, undefined, pan); }
+  // тяжёлый шаг Слушателя: низкий удар + хруст асфальта, громкость по близости
+  thud(pan = 0, vol = 1) {
+    this._noiseBurst(0.14, 60 + Math.random() * 18, 'lowpass', 0.5 * vol, undefined, pan);
+    this._noiseBurst(0.05, 260 + Math.random() * 120, 'bandpass', 0.2 * vol, undefined, pan);
+  }
   // крик Пустого, укравшего время
   steal() {
     this._noiseBurst(0.9, 3000, 'highpass', 0.3);

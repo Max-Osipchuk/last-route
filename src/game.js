@@ -90,27 +90,56 @@ export class Listener {
   constructor(scene) {
     this.group = new THREE.Group();
     // не чисто чёрный: холодный отлив, чтобы силуэт читался в тумане
-    const mat = new THREE.MeshStandardMaterial({ color: 0x10131a, roughness: 0.85, emissive: 0x131a28, emissiveIntensity: 0.45 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x10131a, roughness: 0.85, emissive: 0x1b2335, emissiveIntensity: 0.7 });
+    const bodyParts = [];
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.7, 4, 8), mat);
     torso.position.y = 1.85;
+    bodyParts.push(torso);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), mat);
     head.position.y = 3.05;
     this.head = head;
+    bodyParts.push(head);
     for (const s of [-1, 1]) {
       const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 1.45, 3, 6), mat);
       arm.position.set(0.42 * s, 1.8, 0);
       arm.rotation.z = 0.18 * s;
       this.group.add(arm);
+      bodyParts.push(arm);
       const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 1.0, 3, 6), mat);
       leg.position.set(0.18 * s, 0.62, 0);
       this.group.add(leg);
+      bodyParts.push(leg);
     }
-    const earMat = new THREE.MeshBasicMaterial({ color: 0xd6e2f5 });
+    // бледный контур-оболочка: силуэт виден даже в полной темноте
+    const rimMat = new THREE.MeshBasicMaterial({ color: 0x27344f, side: THREE.BackSide });
+    for (const m of bodyParts) {
+      const hull = new THREE.Mesh(m.geometry, rimMat);
+      hull.position.copy(m.position);
+      hull.rotation.copy(m.rotation);
+      hull.scale.setScalar(1.12);
+      this.group.add(hull);
+    }
+    const earMat = new THREE.MeshBasicMaterial({ color: 0xe8f1ff });
     for (const s of [-1, 1]) {
-      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.085, 6, 4), earMat);
-      ear.position.set(0.2 * s, 3.06, 0);
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 4), earMat);
+      ear.position.set(0.22 * s, 3.06, 0);
       this.group.add(ear);
     }
+    // холодный ореол над головой — виден сквозь туман издалека
+    const hc = document.createElement('canvas'); hc.width = hc.height = 64;
+    const hctx = hc.getContext('2d');
+    const hg = hctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    hg.addColorStop(0, 'rgba(170,195,235,0.8)');
+    hg.addColorStop(1, 'rgba(170,195,235,0)');
+    hctx.fillStyle = hg; hctx.fillRect(0, 0, 64, 64);
+    const haloTex = new THREE.CanvasTexture(hc);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: haloTex, transparent: true, opacity: 0.4,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    halo.scale.set(2.2, 2.2, 1);
+    halo.position.y = 3.05;
+    this.group.add(halo);
     this.group.add(torso, head);
     scene.add(this.group);
     this.scene = scene;
@@ -160,7 +189,7 @@ export class Listener {
       this.idleT -= dt;
       if (this.idleT <= 0) {
         this.idleT = 5 + Math.random() * 4;
-        const a = Math.random() * Math.PI * 2, r = 55 + Math.random() * 35;
+        const a = Math.random() * Math.PI * 2, r = 75 + Math.random() * 45;
         this.target.set(player.pos.x + Math.cos(a) * r, player.pos.z + Math.sin(a) * r);
       }
       speed = 1.2;
@@ -216,9 +245,9 @@ export class Listener {
     }
     // тяжёлые шаги, когда он близко и движется
     this.thudT -= dt;
-    if (dist < 30 && speed > 0 && this.thudT <= 0) {
-      this.thudT = speed > 5 ? 0.34 : 0.62;
-      audio.thud(pan);
+    if (dist < 45 && speed > 0 && this.thudT <= 0) {
+      this.thudT = speed > 5 ? 0.34 : 0.66;
+      audio.thud(pan, Math.min(1, (45 - dist) / 35));
     }
     return dist;
   }
@@ -354,6 +383,7 @@ export class Game {
     if (this.listener) this.listener.remove();
     for (const a of this.angels) a.remove();
     this.ui.marker.style.display = 'none';
+    this.ui.noise.style.opacity = 0;
     if (type === 'bad') this.audio.steal(); else { this.audio.doorHiss(); this.audio.setRumble(1); }
     this.ui.fade.style.opacity = 1;
     setTimeout(() => {
@@ -382,6 +412,7 @@ export class Game {
       for (const a of this.angels) a.remove();
       this.angels = [];
       this.ui.marker.style.display = 'none';
+      this.ui.noise.style.opacity = 0;
       this.audio.setDrone(0);
       this.audio.setRumble(0.5);
       this.setObjective('ПОСЛЕДНИЙ ПОЕЗД ЖДЁТ<br><span class="sub">Сядь в вагон</span>');
@@ -463,6 +494,18 @@ export class Game {
       // на корточках и без шума тебя надо буквально задеть
       const killR = this.player.crouching && this.player.noise === 0 ? 0.8 : 1.7;
       if (dist < killR) this.onKill();
+      // первая близкая встреча — объяснить правило выживания прямо на экране
+      if (!this.encounterToastDone && dist < 40) {
+        this.encounterToastDone = true;
+        this.toast('ОН НЕ ВИДИТ. Замри или присядь (Ctrl) — и он пройдёт мимо.', 8);
+      }
+      // индикатор шума
+      const n = this.ui.noise;
+      n.style.opacity = 0.85;
+      if (this.player.crouching) { n.textContent = 'КРАДЁШЬСЯ'; n.style.color = '#7fa3d8'; }
+      else if (this.player.noise >= 1) { n.textContent = 'БЕГ — ОН СЛЫШИТ'; n.style.color = '#c43a2e'; }
+      else if (this.player.noise > 0) { n.textContent = 'ШАГ'; n.style.color = '#b59a55'; }
+      else { n.textContent = 'ТИХО'; n.style.color = '#6a7280'; }
 
       // ангелы крадут время
       for (const a of this.angels) {
