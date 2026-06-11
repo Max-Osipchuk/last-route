@@ -98,107 +98,305 @@ function noise(ctx, s, n, alpha) {
   }
 }
 
-// Панелька: 4 этажа x 4 окна на тайл
+// Панелька: 4 этажа x 4 окна на тайл (ячейка 256px при 1024)
+// Раскладка окна в ячейке: ox=fx*256+68, oy=fy*256+52, размер 120x152 —
+// panelEmissive обязан совпадать с panelAlbedo по этим координатам!
 function panelAlbedo() {
-  return canvasTex(512, (ctx, s) => {
+  return canvasTex(1024, (ctx, s) => {
     ctx.fillStyle = '#7d7668'; ctx.fillRect(0, 0, s, s);
-    // потёки дождя
-    for (let i = 0; i < 30; i++) {
+    // каждая бетонная панель чуть своего тона + редкие «заплатки» после ремонта
+    for (let py = 0; py < 4; py++) for (let px = 0; px < 4; px++) {
+      const dv = (Math.random() - 0.5) * 14;
+      ctx.fillStyle = `rgba(${125 + dv | 0},${118 + dv | 0},${104 + dv | 0},0.55)`;
+      ctx.fillRect(px * 256, py * 256, 256, 256);
+      if (Math.random() < 0.12) { // заплатка другого оттенка
+        ctx.fillStyle = Math.random() < 0.5 ? 'rgba(148,136,114,0.5)' : 'rgba(110,108,104,0.5)';
+        ctx.fillRect(px * 256 + 8, py * 256 + 8, 240, 240);
+      }
+    }
+    // потёки дождя сверху вниз
+    for (let i = 0; i < 50; i++) {
       const x = Math.random() * s;
       const grd = ctx.createLinearGradient(x, 0, x, s);
-      grd.addColorStop(0, 'rgba(40,38,32,0.25)'); grd.addColorStop(1, 'rgba(40,38,32,0)');
-      ctx.fillStyle = grd; ctx.fillRect(x, 0, 2 + Math.random() * 5, s);
+      grd.addColorStop(0, 'rgba(40,38,32,0.28)'); grd.addColorStop(1, 'rgba(40,38,32,0)');
+      ctx.fillStyle = grd; ctx.fillRect(x, 0, 3 + Math.random() * 8, s);
     }
-    noise(ctx, s, 900, 0.06);
-    // швы панелей
-    ctx.strokeStyle = 'rgba(30,28,24,0.85)'; ctx.lineWidth = 3;
+    noise(ctx, s, 2600, 0.06);
+    // швы панелей с грязью по краям
     for (let i = 0; i <= 4; i++) {
-      ctx.beginPath(); ctx.moveTo(i * 128, 0); ctx.lineTo(i * 128, s); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i * 128); ctx.lineTo(s, i * 128); ctx.stroke();
+      ctx.strokeStyle = 'rgba(30,28,24,0.85)'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(i * 256, 0); ctx.lineTo(i * 256, s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * 256); ctx.lineTo(s, i * 256); ctx.stroke();
+      ctx.strokeStyle = 'rgba(52,48,42,0.35)'; ctx.lineWidth = 13;
+      ctx.beginPath(); ctx.moveTo(i * 256, 0); ctx.lineTo(i * 256, s); ctx.stroke();
     }
-    // окна: тёмные провалы с рамой
+    // окна
     for (let fy = 0; fy < 4; fy++) for (let fx = 0; fx < 4; fx++) {
-      const ox = fx * 128 + 34, oy = fy * 128 + 26;
-      ctx.fillStyle = '#34302c'; ctx.fillRect(ox - 4, oy - 4, 68, 84);
-      ctx.fillStyle = '#0a0c10'; ctx.fillRect(ox, oy, 60, 76);
-      ctx.fillStyle = 'rgba(120,130,150,0.10)'; ctx.fillRect(ox, oy, 60, 26);
-      ctx.strokeStyle = '#2c2a26'; ctx.lineWidth = 3;
-      ctx.strokeRect(ox, oy, 60, 76);
-      ctx.beginPath(); ctx.moveTo(ox + 30, oy); ctx.lineTo(ox + 30, oy + 76); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(ox, oy + 38); ctx.lineTo(ox + 60, oy + 38); ctx.stroke();
-      // балконные плиты на части ячеек
-      if ((fx + fy) % 2 === 0) { ctx.fillStyle = 'rgba(58,54,48,0.9)'; ctx.fillRect(fx * 128 + 14, fy * 128 + 108, 100, 12); }
+      const cx = fx * 256, cy = fy * 256;
+      const ox = cx + 68, oy = cy + 52;
+      const plastic = Math.random() < 0.4; // белый стеклопакет vs старая рама
+      // откос
+      ctx.fillStyle = plastic ? '#8f897c' : '#5e5950';
+      ctx.fillRect(ox - 8, oy - 8, 136, 168);
+      // стекло — тёмный провал с холодным отблеском неба сверху
+      ctx.fillStyle = '#0a0c10'; ctx.fillRect(ox, oy, 120, 152);
+      const sky = ctx.createLinearGradient(0, oy, 0, oy + 60);
+      sky.addColorStop(0, 'rgba(125,135,158,0.18)'); sky.addColorStop(1, 'rgba(125,135,158,0)');
+      ctx.fillStyle = sky; ctx.fillRect(ox, oy, 120, 60);
+      // занавеска у части окон
+      if (Math.random() < 0.3) {
+        ctx.fillStyle = 'rgba(96,84,70,0.5)';
+        const side = Math.random() < 0.5 ? ox : ox + 78;
+        ctx.fillRect(side, oy, 42, 152);
+      }
+      // рама
+      ctx.strokeStyle = plastic ? '#b9b4a8' : '#3a352c'; ctx.lineWidth = 6;
+      ctx.strokeRect(ox, oy, 120, 152);
+      ctx.beginPath(); ctx.moveTo(ox + 78, oy); ctx.lineTo(ox + 78, oy + 152); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ox, oy + 76); ctx.lineTo(ox + 78, oy + 76); ctx.stroke();
+      // форточка приоткрыта у некоторых — чёрный клин
+      if (Math.random() < 0.22) {
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.moveTo(ox + 82, oy + 4); ctx.lineTo(ox + 116, oy + 4); ctx.lineTo(ox + 82, oy + 40); ctx.closePath(); ctx.fill();
+      }
+      // потёк грязи под подоконником
+      ctx.fillStyle = 'rgba(45,42,36,0.35)';
+      ctx.fillRect(ox - 4, oy + 154, 128, 8);
+      const drip = ctx.createLinearGradient(0, oy + 160, 0, oy + 210);
+      drip.addColorStop(0, 'rgba(45,42,36,0.3)'); drip.addColorStop(1, 'rgba(45,42,36,0)');
+      ctx.fillStyle = drip; ctx.fillRect(ox + 10 + Math.random() * 60, oy + 160, 14, 50);
+      // кондиционер сбоку от окна + ржавый потёк
+      if (Math.random() < 0.18) {
+        const ax = ox + 126, ay = oy + 20 + Math.random() * 60;
+        ctx.fillStyle = '#9a958b'; ctx.fillRect(ax, ay, 52, 36);
+        ctx.strokeStyle = '#6b675e'; ctx.lineWidth = 3; ctx.strokeRect(ax, ay, 52, 36);
+        for (let l = 0; l < 4; l++) { ctx.beginPath(); ctx.moveTo(ax + 6, ay + 8 + l * 7); ctx.lineTo(ax + 46, ay + 8 + l * 7); ctx.stroke(); }
+        const rust = ctx.createLinearGradient(0, ay + 36, 0, ay + 140);
+        rust.addColorStop(0, 'rgba(122,72,38,0.4)'); rust.addColorStop(1, 'rgba(122,72,38,0)');
+        ctx.fillStyle = rust; ctx.fillRect(ax + 14, ay + 36, 12, 104);
+      }
+      // балкон на части ячеек: плита + ограждение под окном
+      if ((fx + fy) % 2 === 0) {
+        ctx.fillStyle = '#54504a'; ctx.fillRect(cx + 24, cy + 216, 208, 18);
+        // экран ограждения (шифер/металл) с ржавчиной
+        ctx.fillStyle = Math.random() < 0.5 ? '#6e6a60' : '#62666c';
+        ctx.fillRect(cx + 28, cy + 234, 200, 20);
+        ctx.strokeStyle = 'rgba(40,38,34,0.7)'; ctx.lineWidth = 2;
+        for (let l = 0; l < 9; l++) { ctx.beginPath(); ctx.moveTo(cx + 28 + l * 24, cy + 234); ctx.lineTo(cx + 28 + l * 24, cy + 254); ctx.stroke(); }
+        ctx.fillStyle = 'rgba(122,72,38,0.3)';
+        ctx.fillRect(cx + 30 + Math.random() * 160, cy + 234, 10 + Math.random() * 18, 20);
+        // тень под плитой
+        ctx.fillStyle = 'rgba(20,19,17,0.4)'; ctx.fillRect(cx + 24, cy + 212, 208, 5);
+      }
+    }
+    // редкие ржавые потёки от швов
+    for (let i = 0; i < 7; i++) {
+      const x = Math.random() * s, y = (Math.random() * 4 | 0) * 256;
+      const rust = ctx.createLinearGradient(0, y, 0, y + 120);
+      rust.addColorStop(0, 'rgba(118,68,34,0.35)'); rust.addColorStop(1, 'rgba(118,68,34,0)');
+      ctx.fillStyle = rust; ctx.fillRect(x, y, 6 + Math.random() * 10, 120);
     }
   });
 }
 
+// Рельеф панельки: швы и окна — углубления, балконная плита — выступ
+function panelBump() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#888'; ctx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 900; i++) {
+    const v = 110 + Math.random() * 40 | 0;
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+  }
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 4;
+  for (let i = 0; i <= 4; i++) {
+    ctx.beginPath(); ctx.moveTo(i * 128, 0); ctx.lineTo(i * 128, 512); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * 128); ctx.lineTo(512, i * 128); ctx.stroke();
+  }
+  for (let fy = 0; fy < 4; fy++) for (let fx = 0; fx < 4; fx++) {
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(fx * 128 + 34, fy * 128 + 26, 60, 76);
+    if ((fx + fy) % 2 === 0) { ctx.fillStyle = '#e8e8e8'; ctx.fillRect(fx * 128 + 12, fy * 128 + 108, 104, 9); }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
 function panelEmissive(litCells) {
-  return canvasTex(512, (ctx, s) => {
+  return canvasTex(1024, (ctx, s) => {
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, s, s);
     for (const [fx, fy, warm] of litCells) {
-      const ox = fx * 128 + 34, oy = fy * 128 + 26;
+      const ox = fx * 256 + 68, oy = fy * 256 + 52;
       ctx.fillStyle = warm ? '#ffd9a0' : '#9db8e8';
-      ctx.fillRect(ox, oy, 60, 76);
+      ctx.fillRect(ox, oy, 120, 152);
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(ox + 28, oy, 4, 76); ctx.fillRect(ox, oy + 36, 60, 4);
+      ctx.fillRect(ox + 74, oy, 8, 152); ctx.fillRect(ox, oy + 72, 120, 8);
     }
   });
 }
 
 function garageAlbedo() {
-  return canvasTex(256, (ctx, s) => {
+  return canvasTex(512, (ctx, s) => {
     ctx.fillStyle = '#4a4640'; ctx.fillRect(0, 0, s, s);
-    noise(ctx, s, 500, 0.08);
+    noise(ctx, s, 1600, 0.08);
+    // потёки с крыши
+    for (let i = 0; i < 16; i++) {
+      const x = Math.random() * s;
+      const g = ctx.createLinearGradient(0, 0, 0, 200);
+      g.addColorStop(0, 'rgba(30,28,24,0.4)'); g.addColorStop(1, 'rgba(30,28,24,0)');
+      ctx.fillStyle = g; ctx.fillRect(x, 0, 3 + Math.random() * 6, 200);
+    }
     // ворота с рёбрами
-    ctx.fillStyle = '#3a3b3e'; ctx.fillRect(20, 60, 216, 196);
-    for (let i = 0; i < 9; i++) { ctx.fillStyle = i % 2 ? '#34353a' : '#3e3f44'; ctx.fillRect(20, 60 + i * 22, 216, 11); }
-    ctx.strokeStyle = '#26272b'; ctx.lineWidth = 4; ctx.strokeRect(20, 60, 216, 196);
-    ctx.fillStyle = 'rgba(120,60,30,0.25)';
-    for (let i = 0; i < 12; i++) ctx.fillRect(Math.random() * s, 40 + Math.random() * 200, 4 + Math.random() * 14, 3 + Math.random() * 8);
+    ctx.fillStyle = '#3a3b3e'; ctx.fillRect(40, 120, 432, 392);
+    for (let i = 0; i < 9; i++) { ctx.fillStyle = i % 2 ? '#34353a' : '#3e3f44'; ctx.fillRect(40, 120 + i * 44, 432, 22); }
+    ctx.strokeStyle = '#26272b'; ctx.lineWidth = 8; ctx.strokeRect(40, 120, 432, 392);
+    ctx.beginPath(); ctx.moveTo(256, 120); ctx.lineTo(256, 512); ctx.stroke(); // створки
+    // замок и петли
+    ctx.fillStyle = '#222326'; ctx.fillRect(238, 300, 36, 28);
+    // ржавчина: пятна и потёки от верха ворот
+    ctx.fillStyle = 'rgba(120,60,30,0.3)';
+    for (let i = 0; i < 26; i++) ctx.fillRect(Math.random() * s, 80 + Math.random() * 400, 8 + Math.random() * 28, 6 + Math.random() * 16);
+    for (let i = 0; i < 8; i++) {
+      const x = 50 + Math.random() * 410;
+      const g = ctx.createLinearGradient(0, 120, 0, 320);
+      g.addColorStop(0, 'rgba(126,66,30,0.45)'); g.addColorStop(1, 'rgba(126,66,30,0)');
+      ctx.fillStyle = g; ctx.fillRect(x, 120, 5 + Math.random() * 9, 200);
+    }
+    // граффити-тег
+    const tags = ['РЫБА', 'ШУМ', 'СПБ', 'ТИХО'];
+    ctx.save();
+    ctx.translate(80 + Math.random() * 200, 380 + Math.random() * 80);
+    ctx.rotate((Math.random() - 0.5) * 0.2);
+    ctx.font = 'bold 54px Arial';
+    ctx.strokeStyle = 'rgba(150,40,40,0.55)'; ctx.lineWidth = 3;
+    ctx.strokeText(tags[Math.random() * tags.length | 0], 0, 0);
+    ctx.restore();
   });
 }
 
 function shopAlbedo() {
-  return canvasTex(256, (ctx, s) => {
+  return canvasTex(512, (ctx, s) => {
     ctx.fillStyle = '#6a6258'; ctx.fillRect(0, 0, s, s);
-    noise(ctx, s, 400, 0.07);
-    ctx.fillStyle = '#07090d'; ctx.fillRect(16, 90, 100, 140); ctx.fillRect(140, 90, 100, 140);
-    ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 5;
-    ctx.strokeRect(16, 90, 100, 140); ctx.strokeRect(140, 90, 100, 140);
-    ctx.fillStyle = '#2e2a24'; ctx.fillRect(0, 30, s, 40); // козырёк/вывеска без букв
+    noise(ctx, s, 1200, 0.07);
+    // вывеска: тёмный короб с выцветшими буквами
+    ctx.fillStyle = '#2e2a24'; ctx.fillRect(0, 50, s, 90);
+    ctx.font = 'bold 58px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(190,182,160,0.5)';
+    ctx.fillText('ПРОДУКТЫ 24', 256, 116);
+    // витрины с рамами, нижняя кирпичная кладка
+    for (const wx of [28, 280]) {
+      ctx.fillStyle = '#07090d'; ctx.fillRect(wx, 180, 204, 270);
+      ctx.fillStyle = 'rgba(125,135,158,0.08)'; ctx.fillRect(wx, 180, 204, 90);
+      ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 9; ctx.strokeRect(wx, 180, 204, 270);
+      ctx.beginPath(); ctx.moveTo(wx + 102, 180); ctx.lineTo(wx + 102, 450); ctx.stroke();
+      // решётка на витрине
+      ctx.strokeStyle = 'rgba(40,42,46,0.8)'; ctx.lineWidth = 3;
+      for (let l = 1; l < 6; l++) { ctx.beginPath(); ctx.moveTo(wx, 180 + l * 45); ctx.lineTo(wx + 204, 180 + l * 45); ctx.stroke(); }
+    }
+    // цоколь
+    ctx.fillStyle = '#534c42'; ctx.fillRect(0, 460, s, 52);
+    ctx.fillStyle = 'rgba(30,28,24,0.4)';
+    for (let i = 0; i < 20; i++) ctx.fillRect(Math.random() * s, 462 + Math.random() * 46, 10 + Math.random() * 30, 4);
+  });
+}
+
+// слабое холодное свечение витрин магазина + пара горящих букв вывески
+function shopEmissive() {
+  return canvasTex(512, (ctx, s) => {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, s, s);
+    for (const wx of [28, 280]) {
+      const g = ctx.createLinearGradient(0, 180, 0, 450);
+      g.addColorStop(0, 'rgba(120,150,170,0.5)'); g.addColorStop(1, 'rgba(40,60,80,0.15)');
+      ctx.fillStyle = g; ctx.fillRect(wx, 180, 204, 270);
+    }
+    // от вывески горят только обрывки букв
+    ctx.font = 'bold 58px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#b8503a';
+    ctx.save(); ctx.beginPath(); ctx.rect(150, 50, 90, 90); ctx.clip();
+    ctx.fillText('ПРОДУКТЫ 24', 256, 116); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(330, 50, 60, 90); ctx.clip();
+    ctx.fillText('ПРОДУКТЫ 24', 256, 116); ctx.restore();
   });
 }
 
 function miscAlbedo() {
-  return canvasTex(256, (ctx, s) => {
+  return canvasTex(512, (ctx, s) => {
     ctx.fillStyle = '#6e675c'; ctx.fillRect(0, 0, s, s);
-    noise(ctx, s, 600, 0.07);
-    for (let i = 0; i < 14; i++) {
+    noise(ctx, s, 1800, 0.07);
+    // облупившаяся штукатурка: пятна с «кирпичом» под ней
+    for (let i = 0; i < 6; i++) {
+      const x = Math.random() * s, y = Math.random() * s, w = 40 + Math.random() * 90, h = 30 + Math.random() * 60;
+      ctx.fillStyle = '#5a4438'; ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(40,30,24,0.6)'; ctx.lineWidth = 2;
+      for (let r = 0; r < h; r += 12) { ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x + w, y + r); ctx.stroke(); }
+    }
+    for (let i = 0; i < 22; i++) {
       const x = Math.random() * s;
       const grd = ctx.createLinearGradient(x, 0, x, s);
       grd.addColorStop(0, 'rgba(35,32,28,0.3)'); grd.addColorStop(1, 'rgba(35,32,28,0)');
-      ctx.fillStyle = grd; ctx.fillRect(x, 0, 3 + Math.random() * 6, s);
+      ctx.fillStyle = grd; ctx.fillRect(x, 0, 5 + Math.random() * 10, s);
     }
-    const ox = 78, oy = 70;
-    ctx.fillStyle = '#0a0c10'; ctx.fillRect(ox, oy, 100, 120);
-    ctx.strokeStyle = '#2c2a26'; ctx.lineWidth = 4; ctx.strokeRect(ox, oy, 100, 120);
-    ctx.beginPath(); ctx.moveTo(ox + 50, oy); ctx.lineTo(ox + 50, oy + 120); ctx.stroke();
+    // окно
+    const ox = 156, oy = 140;
+    ctx.fillStyle = '#4f4a42'; ctx.fillRect(ox - 10, oy - 10, 220, 260);
+    ctx.fillStyle = '#0a0c10'; ctx.fillRect(ox, oy, 200, 240);
+    ctx.fillStyle = 'rgba(125,135,158,0.1)'; ctx.fillRect(ox, oy, 200, 80);
+    ctx.strokeStyle = '#2c2a26'; ctx.lineWidth = 8; ctx.strokeRect(ox, oy, 200, 240);
+    ctx.beginPath(); ctx.moveTo(ox + 100, oy); ctx.lineTo(ox + 100, oy + 240); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ox, oy + 120); ctx.lineTo(ox + 200, oy + 120); ctx.stroke();
   });
 }
 
-function asphaltTex() {
-  return canvasTex(256, (ctx, s) => {
+// Асфальт: альбедо + карта шероховатости с лужами (лужи гладкие — бликуют под фонарями)
+function asphaltTextures() {
+  // лужи общие для обеих карт
+  const puddles = [];
+  for (let i = 0; i < 7; i++) {
+    puddles.push([Math.random() * 512, Math.random() * 512, 22 + Math.random() * 52, 14 + Math.random() * 30]);
+  }
+  const blob = (ctx, x, y, rx, ry, fill) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    for (let a = 0; a <= 16; a++) {
+      const t = a / 16 * Math.PI * 2;
+      const w = 1 + Math.sin(a * 2.7 + x) * 0.25;
+      const px = x + Math.cos(t) * rx * w, py = y + Math.sin(t) * ry * w;
+      a === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.fill();
+  };
+  const map = canvasTex(512, (ctx, s) => {
     ctx.fillStyle = '#43464d'; ctx.fillRect(0, 0, s, s);
-    noise(ctx, s, 1400, 0.10);
-    for (let i = 0; i < 8; i++) { // трещины
-      ctx.strokeStyle = 'rgba(8,9,11,0.5)'; ctx.lineWidth = 1;
+    noise(ctx, s, 5200, 0.10);
+    for (let i = 0; i < 16; i++) { // трещины
+      ctx.strokeStyle = 'rgba(8,9,11,0.5)'; ctx.lineWidth = 1.5;
       ctx.beginPath();
       let x = Math.random() * s, y = Math.random() * s;
       ctx.moveTo(x, y);
-      for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 60; y += (Math.random() - 0.5) * 60; ctx.lineTo(x, y); }
+      for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 120; y += (Math.random() - 0.5) * 120; ctx.lineTo(x, y); }
       ctx.stroke();
     }
+    for (let i = 0; i < 4; i++) { // заплатки свежего асфальта
+      ctx.fillStyle = 'rgba(28,30,34,0.6)';
+      ctx.fillRect(Math.random() * s, Math.random() * s, 50 + Math.random() * 90, 40 + Math.random() * 70);
+    }
+    for (const [x, y, rx, ry] of puddles) blob(ctx, x, y, rx, ry, 'rgba(12,14,20,0.85)');
   });
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#999'; ctx.fillRect(0, 0, 512, 512); // мокрый асфальт, средняя шероховатость
+  for (let i = 0; i < 2000; i++) {
+    const v = 120 + Math.random() * 70 | 0;
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+  }
+  for (const [x, y, rx, ry] of puddles) blob(ctx, x, y, rx, ry, '#0a0a0a'); // лужи — зеркало
+  const rough = new THREE.CanvasTexture(c);
+  rough.wrapS = rough.wrapT = THREE.RepeatWrapping;
+  return { map, rough };
 }
 
 export function glowTex() {
@@ -248,11 +446,12 @@ export function buildWorld(scene, map) {
   const colliderEdges = [];
 
   // --- земля ---
-  const aspTex = asphaltTex();
-  aspTex.repeat.set(700, 700);
+  const asp = asphaltTextures();
+  asp.map.repeat.set(700, 700);
+  asp.rough.repeat.set(700, 700);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(9000, 9000),
-    new THREE.MeshStandardMaterial({ map: aspTex, roughness: 0.55, metalness: 0.05 })
+    new THREE.MeshStandardMaterial({ map: asp.map, roughnessMap: asp.rough, roughness: 1.0, metalness: 0.08 })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(600, -0.05, -1000);
@@ -268,15 +467,17 @@ export function buildWorld(scene, map) {
 
   // --- материалы зданий ---
   const pa = panelAlbedo();
+  const pBump = panelBump();
   const litA = panelEmissive([[1, 0, 1], [3, 2, 0]]);
   const litB = panelEmissive([[2, 1, 1]]);
   const litC = panelEmissive([]); // совсем тёмный дом
+  const panelOpts = { map: pa, bumpMap: pBump, bumpScale: 1.4, emissive: 0xffffff, vertexColors: true, roughness: 0.85 };
   const mats = {
-    panelA: new THREE.MeshStandardMaterial({ map: pa, emissive: 0xffffff, emissiveMap: litA, emissiveIntensity: 1.3, vertexColors: true, roughness: 0.85 }),
-    panelB: new THREE.MeshStandardMaterial({ map: pa, emissive: 0xffffff, emissiveMap: litB, emissiveIntensity: 1.3, vertexColors: true, roughness: 0.85 }),
-    panelC: new THREE.MeshStandardMaterial({ map: pa, emissive: 0xffffff, emissiveMap: litC, emissiveIntensity: 1.0, vertexColors: true, roughness: 0.85 }),
+    panelA: new THREE.MeshStandardMaterial({ ...panelOpts, emissiveMap: litA, emissiveIntensity: 1.3 }),
+    panelB: new THREE.MeshStandardMaterial({ ...panelOpts, emissiveMap: litB, emissiveIntensity: 1.3 }),
+    panelC: new THREE.MeshStandardMaterial({ ...panelOpts, emissiveMap: litC, emissiveIntensity: 1.0 }),
     garage: new THREE.MeshStandardMaterial({ map: garageAlbedo(), vertexColors: true, roughness: 0.9 }),
-    shop: new THREE.MeshStandardMaterial({ map: shopAlbedo(), vertexColors: true, roughness: 0.8 }),
+    shop: new THREE.MeshStandardMaterial({ map: shopAlbedo(), emissive: 0xffffff, emissiveMap: shopEmissive(), emissiveIntensity: 0.55, vertexColors: true, roughness: 0.8 }),
     misc: new THREE.MeshStandardMaterial({ map: miscAlbedo(), vertexColors: true, roughness: 0.85 }),
     roof: new THREE.MeshStandardMaterial({ color: 0x141619, roughness: 0.95, side: THREE.DoubleSide }),
   };
